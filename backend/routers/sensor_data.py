@@ -58,3 +58,12 @@ def get_sensordata_by_acceleration(acceleration: int):
         return data
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
+
+@router.get("/all/", tags=["Sensor Data"], response_model=list[CarroDataGET])
+def get_all_sensordata():
+    try:
+        cursor = collection.find({})
+        data = [parse_mongo_document(doc) for doc in cursor]
+        return data
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
