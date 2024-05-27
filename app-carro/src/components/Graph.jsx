@@ -1,8 +1,9 @@
 import React, { useContext, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import { DataContext } from '../context/DataContext';
+import styles from './Graph.module.css';
 
-function Graph () {
+function Graph() {
     const { sensorData } = useContext(DataContext);
 
     const unpack = (rows, key) => {
@@ -50,7 +51,7 @@ function Graph () {
     };
 
     return (
-        <div>
+        <div className={styles.container}>
             {sensorData.length > 0 ? (
                 <Plot data={[trace1]} layout={layout} />
             ) : (
