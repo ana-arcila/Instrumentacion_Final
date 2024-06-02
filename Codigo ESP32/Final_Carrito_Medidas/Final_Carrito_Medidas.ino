@@ -65,14 +65,25 @@
     #define LED 2
 
 // ----------------------------------------- Magnetometro -----------------------------------------
-    MPU6050 mpu;
     Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 
     int16_t ax, ay, az;
+    // int16_t gx, gy, gz;
+
+
+// ----------------------------------------- Aceleración y giroscopio -----------------------------------------
+    MPU6050 mpu;
     int16_t gx, gy, gz;
+
+    long tiempo_prev, dt;
+    float girosc_ang_x, girosc_ang_y, girosc_ang_z, Angulo;
+    float girosc_ang_x_prev, girosc_ang_y_prev, girosc_ang_z_prev;
 
 // ----------------------------------------- Comunicacion con el otro ESP32 -----------------------------------------
     HardwareSerial MySerial(2);
+
+    int Enviar = 0;
+    int Enviados = 0;
 
 void setup() {
 
@@ -133,13 +144,21 @@ void setup() {
         while (1);
     }
 
+    tiempo_prev=millis();
 }
+
+String Medidas;
 
 void loop() {
     
     // Acelearación y giroscopio
     mpu.getAcceleration(&ax, &ay, &az);
     mpu.getRotation(&gx, &gy, &gz);
+
+    dt = millis()-tiempo_prev;
+    tiempo_prev=millis();
+    girosc_ang_z = (gz/131)*dt/1000.0 + girosc_ang_z_prev;
+    girosc_ang_z_prev=girosc_ang_z;
 
     // Magnetometro
     sensors_event_t event;
@@ -149,17 +168,23 @@ void loop() {
     float my = event.magnetic.y;
     float mz = event.magnetic.z;
 
-    enviarDatosPosicion(ax, ay, az, gx, gy, gz, mx, my, mz);
+    // enviarDatosPosicion(ax, ay, az, gx, gy, gz, mx, my, mz);
 
-    if (MySerial.available()) {
+    if (MySerial.available()) 
+    {
         char data = MySerial.read();
 
         if (data == 'T')
-        {
+        {   
             Serial.println("Tomando medidas");
-            barrido();
+            Medidas = barrido();
         }
+        Angulo = girosc_ang_z;
+        enviarDatos(0.0,0.0,Angulo,Medidas);
+        // delay(100);
+        // Serial.println(Medidas);
     }
+    
 
     delay(50);
 
@@ -169,20 +194,35 @@ void loop() {
 
 
 
-void barrido()
-{
+String barrido()
+{   
+    Enviar += 1;
+
+  	myServo.write(0);
+    String Distancias = "[";
 	for (int i=0; i<=181; i=i+5)
   	{
 		myServo.write(i);
-		Serial.print("Angulo: ");
-		Serial.print(i);
-		Serial.print("  -  Distancia: ");
-		Serial.println(distancia());
+		// Serial.print("Angulo: ");
+		// Serial.print(i);
+		// Serial.print("  -  Distancia: ");
+        if (i<180)
+        {
+            Distancias += String(distancia());
+            Distancias += ",";
+        }
+        else
+        {
+            Distancias += String(distancia());
+            Distancias += "]";
+        }
+		// Serial.println(distancia());
 		// distancia();
 		delay(100);
   	}  
   	myServo.write(0);
   	delay(500);
+    return Distancias;
 
 }
 
@@ -201,79 +241,126 @@ float distancia()
 	return distance;
 }
 
-void enviarDatosPosicion(float ax, float ay, float az, 
-                         float gx, float gy, float gz, 
-                         float mx, float my, float mz)
+
+void enviarDatos(float x, float y, float Angulo, String Medidas)
 {   // Enviar datos de la aceleración, giroscopio y magnetometro
-    if (WiFi.status() == WL_CONNECTED) 
+    if (Enviar > Enviados)
     {
-        HTTPClient http;
+        Enviados += 1;
+        if (WiFi.status() == WL_CONNECTED) 
+        {
+            HTTPClient http;
 
-        http.begin(serverName); // Especifica la URL del servidor
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("api-key", apiKey);
+            http.begin(serverName); // Especifica la URL del servidor
+            http.addHeader("Content-Type", "application/json");
+            http.addHeader("api-key", apiKey);
 
-        // Datos en formato JSON
-        // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
-        //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
-        String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"" + String(ax) + "\",\"x\":\"" + String(ay) + "\",\"y\":\"" + String(az) + "\"}}";
-        //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
+            // Datos en formato JSON
+            // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
+            //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
+            String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"x (cm)\":\"" + String(x) + "\",\"y (cm)\":\"" + String(y) + "\",\"Angulo (grads)\":\"" + String(Angulo) + "\",\"Medidas (cm)\":\"" + Medidas + "\"}}";
+            
+            //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-        // Envío de la solicitud POST
-        int httpResponseCode = http.POST(jsonData);
+            // Envío de la solicitud POST
+            int httpResponseCode = http.POST(jsonData);
 
-        // Manejo de la respuesta del servidor
-        if (httpResponseCode > 0) {
-        String response = http.getString();
-        Serial.println(httpResponseCode); // Código de respuesta
-        Serial.println(response); // Respuesta del servidor
-        } else {
-        Serial.print("Error on sending POST: ");
-        Serial.println(httpResponseCode);
+            // Manejo de la respuesta del servidor
+            if (httpResponseCode > 0) {
+            String response = http.getString();
+            Serial.println(httpResponseCode); // Código de respuesta
+            Serial.println(response); // Respuesta del servidor
+            } else {
+            Serial.print("Error on sending POST: ");
+            Serial.println(httpResponseCode);
+            }
+            
+            http.end(); // Cierra la conexión
+        } 
+
+        else 
+        {
+            Serial.println("WiFi Disconnected");
         }
-        
-        http.end(); // Cierra la conexión
-    } 
-
-    else 
-    {
-        Serial.println("WiFi Disconnected");
     }
 }
 
-void enviarDatosDistancia(String Cadena)
-{   // Enviar datos de la distancia
-    if (WiFi.status() == WL_CONNECTED) 
-    {
-        HTTPClient http;
 
-        http.begin(serverName); // Especifica la URL del servidor
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("api-key", apiKey);
 
-        // Datos en formato JSON
-        // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
-        String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"Medidas\":\"" + Cadena +  "\"}}";
+// void enviarDatosPosicion(float ax, float ay, float az, 
+//                          float gx, float gy, float gz, 
+//                          float mx, float my, float mz)
+// {   // Enviar datos de la aceleración, giroscopio y magnetometro
+//     if (WiFi.status() == WL_CONNECTED) 
+//     {
+//         HTTPClient http;
 
-        // Envío de la solicitud POST
-        int httpResponseCode = http.POST(jsonData);
+//         http.begin(serverName); // Especifica la URL del servidor
+//         http.addHeader("Content-Type", "application/json");
+//         http.addHeader("api-key", apiKey);
 
-        // Manejo de la respuesta del servidor
-        if (httpResponseCode > 0) {
-        String response = http.getString();
-        Serial.println(httpResponseCode); // Código de respuesta
-        Serial.println(response); // Respuesta del servidor
-        } else {
-        Serial.print("Error on sending POST: ");
-        Serial.println(httpResponseCode);
-        }
+//         // Datos en formato JSON
+//         // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
+//         //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
+//         String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"" + String(ax) + "\",\"x\":\"" + String(ay) + "\",\"y\":\"" + String(az) + "\"}}";
+//         //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+//         // Envío de la solicitud POST
+//         int httpResponseCode = http.POST(jsonData);
+
+//         // Manejo de la respuesta del servidor
+//         if (httpResponseCode > 0) {
+//         String response = http.getString();
+//         Serial.println(httpResponseCode); // Código de respuesta
+//         Serial.println(response); // Respuesta del servidor
+//         } else {
+//         Serial.print("Error on sending POST: ");
+//         Serial.println(httpResponseCode);
+//         }
         
-        http.end(); // Cierra la conexión
-    } 
+//         http.end(); // Cierra la conexión
+//     } 
 
-    else 
-    {
-        Serial.println("WiFi Disconnected");
-    }
-}
+//     else 
+//     {
+//         Serial.println("WiFi Disconnected");
+//     }
+// }
+
+// void enviarDatosDistancia(String Cadena)
+// {   // Enviar datos de la distancia
+//     if (WiFi.status() == WL_CONNECTED) 
+//     {
+//         HTTPClient http;
+
+//         http.begin(serverName); // Especifica la URL del servidor
+//         http.addHeader("Content-Type", "application/json");
+//         http.addHeader("api-key", apiKey);
+
+//         // Datos en formato JSON
+//         // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
+//         String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"Medidas\":\"" + Cadena +  "\"}}";
+
+//         // Envío de la solicitud POST
+//         int httpResponseCode = http.POST(jsonData);
+
+//         // Manejo de la respuesta del servidor
+//         if (httpResponseCode > 0) {
+//         String response = http.getString();
+//         Serial.println(httpResponseCode); // Código de respuesta
+//         Serial.println(response); // Respuesta del servidor
+//         } else {
+//         Serial.print("Error on sending POST: ");
+//         Serial.println(httpResponseCode);
+//         }
+        
+//         http.end(); // Cierra la conexión
+//     } 
+
+//     else 
+//     {
+//         Serial.println("WiFi Disconnected");
+//     }
+// }
