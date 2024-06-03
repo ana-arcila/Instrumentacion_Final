@@ -2,32 +2,14 @@
 
 #include <WiFi.h>
 #include <HTTPClient.h>
-// #include "BluetoothSerial.h"
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_HMC5883_U.h>
+#include <Adafruit_BMP085_U.h>
 #include <MPU6050.h>
-
 #include <HardwareSerial.h>
-
 #include <ESP32Servo.h>
 
-
-// ----------------------------------------- Bluetooth -----------------------------------------
-    //#define USE_PIN // Uncomment this to use PIN during pairing. The pin is specified on the line below
-    // const char *pin = "1234"; // Change this to more secure PIN.
-
-    // String device_name = "ESP32";
-
-    // #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-    // #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
-    // #endif
-
-    // #if !defined(CONFIG_BT_SPP_ENABLED)
-    // #error Serial Bluetooth not available or not enabled. It is only available for the ESP32 chip.
-    // #endif
-
-    // BluetoothSerial SerialBT;
 
 // ----------------------------------------- WiFi -----------------------------------------
     const char* ssid = "MOVISTAR";
@@ -35,8 +17,14 @@
 
     // URL y cabeceras de la solicitud
     // const char* serverName = "https://data.mongodb-api.com/app/data-YOUR_ID/endpoint/data/v1/action/insertOne";
+
+    // Fernando
     const char* serverName = "https://us-east-1.aws.data.mongodb-api.com/app/data-rgxyxuf/endpoint/data/v1/action/insertOne";
     const char* apiKey = "TWAL6hIQBruvlFs6ZeAvIx9AXtafp1teeGqM1crP7gjeoagx3l1Aka3YzHa0c0KM";
+
+    // Ana
+    // const char* serverName = "https://us-east-1.aws.data.mongodb-api.com/app/data-dmxflhz/endpoint/data/v1/action/insertOne";
+    // const char* apiKey = "f3L2c6jSnM13a72FvP6DyLTQeWM1ie4qJFALUWj8tZggzKSFDjVPDXKx6JhoGeck";
 
 
 // ----------------------------------------- Servo -----------------------------------------
@@ -52,27 +40,14 @@
 
     float duration, distance;  
 
-// ----------------------------------------- Motores -----------------------------------------
-    // Motor A
-    int IN1 = 4;
-    int IN2 = 18;
 
-    // Motor B
-    //int ENB = 5;
-    int IN3 = 19;
-    int IN4 = 23;
-
-    #define LED 2
-
-// ----------------------------------------- Magnetometro -----------------------------------------
+// ----------------------------------------- GY-88 -----------------------------------------
     Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+    Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085);
 
-    int16_t ax, ay, az;
-    // int16_t gx, gy, gz;
-
-
-// ----------------------------------------- Aceleración y giroscopio -----------------------------------------
     MPU6050 mpu;
+    
+    int16_t ax, ay, az;
     int16_t gx, gy, gz;
 
     long tiempo_prev, dt;
@@ -90,14 +65,6 @@ void setup() {
     Serial.begin(115200);
     MySerial.begin(115200, SERIAL_8N1, 16, 17); // 16 (RX) y 17 (TX)
 
-// Bluetooth
-    // SerialBT.begin(device_name); //Bluetooth device name
-    // Serial.printf("The device with name \"%s\" is started.\nNow you can pair it with Bluetooth!\n", device_name.c_str());
-    // //Serial.printf("The device with name \"%s\" and MAC address %s is started.\nNow you can pair it with Bluetooth!\n", device_name.c_str(), SerialBT.getMacString()); // Use this after the MAC method is implemented
-    // #ifdef USE_PIN
-    //     SerialBT.setPin(pin);
-    //     Serial.println("Using PIN");
-    // #endif
 
 // Conexión a la red WiFi
     WiFi.begin(ssid, password);
@@ -118,17 +85,6 @@ void setup() {
 	pinMode(trigPin, OUTPUT);  
 	pinMode(echoPin, INPUT);
 
-  	// Inicializar el Serial para la depuración
-
-// Motores      Los motores en el otro ESP32
-	// pinMode(LED, OUTPUT);
-
-    // //pinMode(LED_PIN, OUTPUT);
-    // pinMode (IN1, OUTPUT); //Configuramos los pines del L298N como salida
-    // pinMode (IN2, OUTPUT);
-    // pinMode (IN3, OUTPUT);
-    // pinMode (IN4, OUTPUT);
-
 // Magnetometro
     Wire.begin();
     mpu.initialize();
@@ -139,15 +95,31 @@ void setup() {
         Serial.println("Fallo en la conexión con el MPU6050");
     }
 
+
     if (!mag.begin()) {
         Serial.println("No se pudo encontrar un sensor HMC5883L, verifique la conexión.");
         while (1);
+    }
+    else
+    {
+        Serial.println("Sensor HMC5883L iniciado correctamente");
+    }
+
+    if(!bmp.begin()) {
+    Serial.print("No se puede encontrar el sensor BMP085/BMP180, verifique las conexiones.");
+    while(1);
+    }
+    else
+    {
+        Serial.println("Sensor BMP085/BMP180 iniciado correctamente");
     }
 
     tiempo_prev=millis();
 }
 
 String Medidas;
+float mx, my, mz;
+float temperatura,presion,altura;
 
 void loop() {
     
@@ -160,29 +132,40 @@ void loop() {
     girosc_ang_z = (gz/131)*dt/1000.0 + girosc_ang_z_prev;
     girosc_ang_z_prev=girosc_ang_z;
 
-    // Magnetometro
-    sensors_event_t event;
-    mag.getEvent(&event);
 
-    float mx = event.magnetic.x;
-    float my = event.magnetic.y;
-    float mz = event.magnetic.z;
-
-    // enviarDatosPosicion(ax, ay, az, gx, gy, gz, mx, my, mz);
 
     if (MySerial.available()) 
     {
         char data = MySerial.read();
 
         if (data == 'T')
-        {   
+        {       
+            // Distancias
+            Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
             Serial.println("Tomando medidas");
             Medidas = barrido();
+            
+
+            // Magnetometro
+            sensors_event_t mag_event;
+            mag.getEvent(&mag_event);
+
+            mx = mag_event.magnetic.x;
+            my = mag_event.magnetic.y;
+            mz = mag_event.magnetic.z;
+
+            // BMP
+            sensors_event_t bmp_event;
+            bmp.getEvent(&bmp_event);
+
+            bmp.getTemperature(&temperatura);
+            presion = bmp_event.pressure;
+            altura = bmp.pressureToAltitude(SENSORS_PRESSURE_SEALEVELHPA, presion);
+
+
+            Angulo = girosc_ang_z;
+            enviarDatos(0.0,0.0,mx,my,mz,temperatura,presion,altura,Angulo,Medidas);
         }
-        Angulo = girosc_ang_z;
-        enviarDatos(0.0,0.0,Angulo,Medidas);
-        // delay(100);
-        // Serial.println(Medidas);
     }
     
 
@@ -199,13 +182,11 @@ String barrido()
     Enviar += 1;
 
   	myServo.write(0);
+    delay(400);
     String Distancias = "[";
 	for (int i=0; i<=181; i=i+5)
   	{
 		myServo.write(i);
-		// Serial.print("Angulo: ");
-		// Serial.print(i);
-		// Serial.print("  -  Distancia: ");
         if (i<180)
         {
             Distancias += String(distancia());
@@ -216,8 +197,6 @@ String barrido()
             Distancias += String(distancia());
             Distancias += "]";
         }
-		// Serial.println(distancia());
-		// distancia();
 		delay(100);
   	}  
   	myServo.write(0);
@@ -236,16 +215,19 @@ float distancia()
 	digitalWrite(trigPin, LOW);  
 	duration = pulseIn(echoPin, HIGH);
 	distance = (duration*.0343)/2;  
-	// Serial.print("Distance: ");  
-	// Serial.println(distance); 
 	return distance;
 }
 
 
-void enviarDatos(float x, float y, float Angulo, String Medidas)
+// void enviarDatos(float x, float y, float Angulo, String Medidas)
+void enviarDatos(float x, float y, 
+                 float mx, float my, float mz,
+                 float temperatura, float presion, float altura,
+                 float Angulo, String Medidas)
 {   // Enviar datos de la aceleración, giroscopio y magnetometro
     if (Enviar > Enviados)
     {
+        Serial.println("Enviando Datos");
         Enviados += 1;
         if (WiFi.status() == WL_CONNECTED) 
         {
@@ -258,8 +240,8 @@ void enviarDatos(float x, float y, float Angulo, String Medidas)
             // Datos en formato JSON
             // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
             //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
-            String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"x (cm)\":\"" + String(x) + "\",\"y (cm)\":\"" + String(y) + "\",\"Angulo (grads)\":\"" + String(Angulo) + "\",\"Medidas (cm)\":\"" + Medidas + "\"}}";
-            
+            // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"x\":\"" + String(x) + "\",\"y\":\"" + String(y) + "\",\"Angulo\":\"" + String(Angulo) + "\",\"Medidas\":\"" + Medidas + "\"}}";
+            String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"x\":\"" + String(x) + "\",\"y\":\"" + String(y) + "\",\"mx\":\"" + String(mx) + "\",\"my\":\"" + String(my) + "\",\"mz\":\"" + String(mz) + "\",\"temperatura\":\"" + String(temperatura) + "\",\"presion\":\"" + String(presion) + "\",\"altura\":\"" + String(altura) + "\",\"Angulo\":\"" + String(Angulo) + "\",\"Medidas\":\"" + Medidas + "\"}}";
             //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -287,80 +269,3 @@ void enviarDatos(float x, float y, float Angulo, String Medidas)
 }
 
 
-
-// void enviarDatosPosicion(float ax, float ay, float az, 
-//                          float gx, float gy, float gz, 
-//                          float mx, float my, float mz)
-// {   // Enviar datos de la aceleración, giroscopio y magnetometro
-//     if (WiFi.status() == WL_CONNECTED) 
-//     {
-//         HTTPClient http;
-
-//         http.begin(serverName); // Especifica la URL del servidor
-//         http.addHeader("Content-Type", "application/json");
-//         http.addHeader("api-key", apiKey);
-
-//         // Datos en formato JSON
-//         // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
-//         //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
-//         String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"" + String(ax) + "\",\"x\":\"" + String(ay) + "\",\"y\":\"" + String(az) + "\"}}";
-//         //  ---------------------------------------------   Modificar   --------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-//         // Envío de la solicitud POST
-//         int httpResponseCode = http.POST(jsonData);
-
-//         // Manejo de la respuesta del servidor
-//         if (httpResponseCode > 0) {
-//         String response = http.getString();
-//         Serial.println(httpResponseCode); // Código de respuesta
-//         Serial.println(response); // Respuesta del servidor
-//         } else {
-//         Serial.print("Error on sending POST: ");
-//         Serial.println(httpResponseCode);
-//         }
-        
-//         http.end(); // Cierra la conexión
-//     } 
-
-//     else 
-//     {
-//         Serial.println("WiFi Disconnected");
-//     }
-// }
-
-// void enviarDatosDistancia(String Cadena)
-// {   // Enviar datos de la distancia
-//     if (WiFi.status() == WL_CONNECTED) 
-//     {
-//         HTTPClient http;
-
-//         http.begin(serverName); // Especifica la URL del servidor
-//         http.addHeader("Content-Type", "application/json");
-//         http.addHeader("api-key", apiKey);
-
-//         // Datos en formato JSON
-//         // String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"t\":\"{}\",\"x\":\"{}\",\"y\":{}}}".format(t,x,y);
-//         String jsonData = "{\"dataSource\":\"Cluster0\",\"database\":\"IOT_Carrito\",\"collection\":\"Datos\",\"document\":{\"Medidas\":\"" + Cadena +  "\"}}";
-
-//         // Envío de la solicitud POST
-//         int httpResponseCode = http.POST(jsonData);
-
-//         // Manejo de la respuesta del servidor
-//         if (httpResponseCode > 0) {
-//         String response = http.getString();
-//         Serial.println(httpResponseCode); // Código de respuesta
-//         Serial.println(response); // Respuesta del servidor
-//         } else {
-//         Serial.print("Error on sending POST: ");
-//         Serial.println(httpResponseCode);
-//         }
-        
-//         http.end(); // Cierra la conexión
-//     } 
-
-//     else 
-//     {
-//         Serial.println("WiFi Disconnected");
-//     }
-// }
