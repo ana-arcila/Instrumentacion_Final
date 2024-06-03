@@ -1,28 +1,43 @@
-import { useState } from 'react';
-import reactLogo from './assets/react.svg';
-import viteLogo from '/vite.svg';
+import React, { useState } from 'react';
 import './App.css';
 import Graph from './components/Graph';
 
 function App() {
-  const [count, setCount] = useState(0)
+    const [selectedAxis, setSelectedAxis] = useState('magnetic_field_magnitude'); // Default to 'mz'
 
-  return (
-    <>
-      <div class="container">
-        <label for="Sensor">Escoja un sensor</label>
-        <select name="grafico" id="Sensor" onchange="fetchAndPlotData()">
-            <option value="">-Escoja un campo-</option>
-            <option value="Mag">Magnetico</option>
-            <option value="Acc">Gravitacional</option>
-            <option value="Temp">Temperatura</option>
-        </select>
-    </div>
-    <div id="3d-graph">
-    <Graph/>
-    </div>
-    </>
-  )
+    const handleSensorChange = (event) => {
+      const value = event.target.value;
+      let axis = 'mx'; // Default to 'mx' if no match
+      if (value === 'Mag') {
+          axis = 'magnetic_field_magnitude'; // Use the full field name
+      } else if (value === 'Temp') {
+          axis = 'temperatura';
+      } else if (value === 'Alt') {
+          axis = 'altura';
+      } else if (value === 'Pres') {
+          axis = 'presion';
+      }
+      setSelectedAxis(axis);
+  };
+  
+
+    return (
+        <>
+            <div className="container">
+                <label htmlFor="Sensor">Choose a sensor field</label>
+                <select name="grafico" id="Sensor" onChange={handleSensorChange}>
+                    <option value="">-Choose a field-</option>
+                    <option value="Mag">Magnetic Field Magnitude</option>
+                    <option value="Alt">Altitude</option>
+                    <option value="Temp">Temperature</option>
+                    <option value="Pres">Pressure</option>
+                </select>
+            </div>
+            <div id="3d-graph">
+                <Graph selectedAxis={selectedAxis} />
+            </div>
+        </>
+    );
 }
 
-export default App
+export default App;

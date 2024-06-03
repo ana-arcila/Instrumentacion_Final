@@ -1,40 +1,32 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { DataContext } from '../context/DataContext';
 import styles from './Graph.module.css';
 
-function Graph() {
+function Graph({ selectedAxis }) {
     const { sensorData } = useContext(DataContext);
 
-    const unpack = (rows, key) => {
-        return rows.map(row => row[key]);
-    };
+    // State to hold scatter plot data
+    const [scatterData, setScatterData] = useState([]);
 
+    // Effect to update scatter plot data when sensorData or selectedAxis changes
     useEffect(() => {
         if (sensorData.length > 0) {
-            console.log('Plotting data:', sensorData);
+            const newScatterData = {
+                x: sensorData.map(row => row.x),
+                y: sensorData.map(row => row.y),
+                z: sensorData.map(row => row[selectedAxis]),
+                mode: 'markers',
+                type: 'scatter3d',
+                marker: {
+                    size: 8,
+                    symbol: 'circle',
+                    opacity: 0.8,
+                },
+            };
+            setScatterData([newScatterData]);
         }
-    }, [sensorData]);
-
-    const x = unpack(sensorData, 'acceleration');
-    const y = unpack(sensorData, 'hall');
-    const z = unpack(sensorData, 'temperature');
-
-    const trace1 = {
-        x: x,
-        y: y,
-        z: z,
-        mode: 'markers',
-        marker: {
-            size: 12,
-            line: {
-                color: 'rgba(217, 217, 217, 0.14)',
-                width: 0.5,
-            },
-            opacity: 0.8,
-        },
-        type: 'scatter3d',
-    };
+    }, [sensorData, selectedAxis]);
 
     const layout = {
         margin: {
@@ -44,21 +36,21 @@ function Graph() {
             t: 0,
         },
         scene: {
-            xaxis: { title: 'Aceleracion' },
-            yaxis: { title: 'Hall' },
-            zaxis: { title: 'Temperatura' },
+            xaxis: { title: 'X Axis' },
+            yaxis: { title: 'Y Axis' },
+            zaxis: { title: selectedAxis.charAt(0).toUpperCase() + selectedAxis.slice(1) },
         },
     };
 
     return (
         <div className={styles.container}>
-            {sensorData.length > 0 ? (
-                <Plot data={[trace1]} layout={layout} />
-            ) : (
-                <div>No data to display</div>
-            )}
+            <Plot
+                data={scatterData}
+                layout={layout}
+                style={{ width: '250%', height: '500px' }}
+            />
         </div>
     );
-};
+}
 
 export default Graph;

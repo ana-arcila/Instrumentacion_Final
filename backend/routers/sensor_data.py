@@ -1,66 +1,50 @@
-from fastapi import APIRouter
+import math
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from bson import ObjectId
 from config.mogo_db import collection
 from models.carrodat_models import CarroDataGET
+import json
 
 router = APIRouter()
 
 def parse_mongo_document(document):
-    return {
-        "_id": str(document["_id"]),
-        "distance": int(document["distance"]),
-        "acceleration": int(document["acceleration"]),
-        "hall": float(document["hall"]),
-        "temperature": float(document["temperature"]),
-    }
+    try:
+        # Convert strings to floats for calculation
+        mx = float(document["mx"])
+        my = float(document["my"])
+        mz = float(document["mz"])
 
-@router.get("/", tags=["Sensor Data"], response_model=list[CarroDataGET])
-def get_sensordata(distance: int = None, hall: float = None, acceleration: int = None):
-    try:
-        query = {}
-        if distance is not None:
-            query["distance"] = distance
-        if hall is not None:
-            query["hall"] = hall
-        if acceleration is not None:
-            query["acceleration"] = acceleration
-        
-        cursor = collection.find(query)
-        data = [parse_mongo_document(doc) for doc in cursor]
-        return data
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
+        # Calculate the magnitude of the magnetic field
+        magnetic_field_magnitude = math.sqrt(mx**2 + my**2 + mz**2)
 
-@router.get("/dist/", tags=["Sensor Data"], response_model=list[CarroDataGET])
-def get_sensordata_by_dist(distance: int):
-    try:
-        cursor = collection.find({"distance": distance})
-        data = [parse_mongo_document(doc) for doc in cursor]
-        return data
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    
-@router.get("/hall/", tags=["Sensor Data"], response_model=list[CarroDataGET])
-def get_sensordata_by_hall(hall: float):
-    try:
-        cursor = collection.find({"hall": hall})
-        data = [parse_mongo_document(doc) for doc in cursor]
-        return data
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    
+        # Parse the Medidas field from string to a list of floats if necessary
+        if isinstance(document["Medidas"], str):
+            medidas_list = json.loads(document["Medidas"])
+        else:
+            medidas_list = document["Medidas"]
 
-@router.get("/acc/", tags=["Sensor Data"], response_model=list[CarroDataGET])
-def get_sensordata_by_acceleration(acceleration: int):
-    try:
-        cursor = collection.find({"acceleration": acceleration})
-        data = [parse_mongo_document(doc) for doc in cursor]
-        return data
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
+        return {
+            "_id": str(document["_id"]),  # Correctly handle ObjectId
+            "x": float(document["x"]),
+            "y": float(document["y"]),
+            "mx": float(document["mx"]),
+            "my": float(document["my"]),
+            "mz": float(document["mz"]),
+            "temperatura": float(document["temperatura"]),
+            "presion": float(document["presion"]),
+            "altura": float(document["altura"]),
+            "Angulo": float(document["Angulo"]),
+            "Medidas": [float(m) for m in medidas_list],
+            "magnetic_field_magnitude": magnetic_field_magnitude
+        }
+    except KeyError as e:
+        raise ValueError(f"Missing field in document: {e}")
+    except ValueError as e:
+        raise ValueError(f"Invalid value in document: {e}")
 
 @router.get("/all/", tags=["Sensor Data"], response_model=list[CarroDataGET])
-def get_all_sensordata():
+def get_all_shareddata():
     try:
         cursor = collection.find({})
         data = [parse_mongo_document(doc) for doc in cursor]

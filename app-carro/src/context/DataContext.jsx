@@ -14,15 +14,20 @@ export function DataContextProvider(props) {
         const fetchData = async () => {
             try {
                 const response = await fetch('http://127.0.0.1:8000/carrodata/all/');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch sensor data');
+                }
                 const data = await response.json();
+                console.log('Fetched Sensor Data:', data); // Log the fetched data
                 setSensorData(data);
             } catch (err) {
                 console.error(err);
             }
         };
-
+    
         fetchData();
     }, [fetchFlag]);
+    
 
     const toggleFetchFlag = () => {
         setFetchFlag(prevFlag => !prevFlag);

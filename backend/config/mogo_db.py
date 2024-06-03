@@ -11,7 +11,7 @@ if not uri:
 
 # Create a new client and connect to the server
 client = MongoClient(uri, server_api=ServerApi('1'))
-db = client["IOT-database"]
-collection = db["pruebas"]
+db = client["IOT_Carrito"]
+collection = db["Datos2"]
 
 
