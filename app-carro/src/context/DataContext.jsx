@@ -13,7 +13,7 @@ export function DataContextProvider(props) {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('http://127.0.0.1:8000/carrodata/all/');
+                const response = await fetch('https://backend-carrito.onrender.com/carrodata/all/');
                 if (!response.ok) {
                     throw new Error('Failed to fetch sensor data');
                 }
